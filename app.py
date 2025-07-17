@@ -1,26 +1,39 @@
-import gradio as gr
-import subprocess
-import os
+import subprocess, sys, gradio as gr
 
-def search_username(username):
-    # Chạy Sherlock qua dòng lệnh, chỉ trả về 20 dòng đầu kết quả cho nhanh
+def search_username(username: str) -> str:
+    """
+    Gọi Sherlock CLI rồi trả về kết quả (tối đa 60 dòng đầu để tránh tràn màn hình).
+    """
+    username = username.strip()
+    if not username:
+        return "❗️ Bạn chưa nhập username."
+
     try:
-        result = subprocess.check_output(
-            ["python3", "sherlock.py", username, "--print-found"],
+        # Gọi bằng Python hiện tại để tránh xung đột phiên bản
+        output = subprocess.check_output(
+            [sys.executable, "-m", "sherlock_project.sherlock", username, "--print-found"],
             stderr=subprocess.STDOUT,
-            timeout=60
-        ).decode("utf-8")
-        # Cắt bớt output nếu quá dài
-        return "\n".join(result.splitlines()[:40])
-    except subprocess.CalledProcessError as e:
-        return e.output.decode("utf-8")
-    except Exception as e:
-        return str(e)
+            timeout=120,          # 2 phút – tránh job bị treo lâu trên HF
+        ).decode("utf-8", errors="replace")
 
-gr.Interface(
-    fn=search_username,
-    inputs=gr.Textbox(label="Username", placeholder="Nhập username bạn muốn kiểm tra..."),
-    outputs=gr.Textbox(label="Kết quả"),
-    title="Sherlock: Social Media Username Checker",
-    description="Nhập username, Sherlock sẽ tìm các mạng xã hội trùng username đó."
-).launch()
+        lines = [l for l in output.splitlines() if l.strip()]
+        if not lines:
+            return "⚠️ Không tìm thấy tài khoản trùng khớp."
+        return "\n".join(lines[:60])
+
+    except subprocess.CalledProcessError as e:
+        return f"❌ Sherlock báo lỗi:\n{e.output.decode('utf-8', errors='replace')}"
+    except Exception as e:
+        return f"❌ Lỗi không xác định: {e}"
+
+demo = gr.Interface(
+    fn          = search_username,
+    inputs      = gr.Textbox(label="Username", placeholder="Ví dụ: johndoe"),
+    outputs     = gr.Textbox(label="Kết quả"),
+    title       = "Sherlock – Tìm username trên 400+ mạng xã hội",
+    description = "Nhập một username để kiểm tra xem đã được dùng ở những mạng xã hội nào."
+)
+
+if __name__ == "__main__":
+    demo.launch()
+
